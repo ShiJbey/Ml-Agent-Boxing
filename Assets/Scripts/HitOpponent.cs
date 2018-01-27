@@ -12,24 +12,59 @@ public class HitOpponent : MonoBehaviour {
 		
 	}
 	
-	private void OnCollisionEnter(Collision collision)
+	void OnCollisionEnter(Collision collision)
 	{
-		/*
-		 * Cases to check for
-		 * a) Agent collides with opponent gloves (if blocking => puncish attacker, reward defender)
-		 * b) Agent collides with opponent head (reward attacker)
-		 * c) Agent collides with opponent body (reward attacker)
-		 */ 
+        BoxingMatch area = boxingArea.GetComponent<BoxingMatch>();
+        BoxingAgent agentA = area.AgentA.GetComponent<BoxingAgent>();
+        BoxingAgent agentB = area.AgentB.GetComponent<BoxingAgent>();
 
-		BoxingMatch area = boxingArea.GetComponent<BoxingMatch> ();
-		Boxer agentA = area.AgentA.GetComponent<Boxer> ();
-		Boxer agentB = area.AgentB.GetComponent<Boxer> ();
-		if (collision.gameObject.tag == "agent") {
-			if (collision.gameObject.name == "BoxerA") {
+		if (collision.gameObject.tag == "AgentA") {
+            if(collision.gameObject.GetComponent<Boxer>().actionState != (int)Boxer.ActionState.BLOCK)
+            {
+                // Intentional punch made contact with other boxer
+                if (this.gameObject.GetComponent<Boxer>().actionState == (int)Boxer.ActionState.BLOCK)
+                {
+                    // This punch has been blocked
+                    // Slightly punish Agent A
+                    agentA.reward = -0.05f;
+                    // Reward Agent B
+                    agentB.reward = 0.1f;
+                    
+                }
+                else
+                {
+                    Debug.Log(collision.gameObject.name + " landed a punch on " + this.gameObject.name);
+                    // Punch was not blocked
+                    // Reward A
+                    agentA.reward = 0.1f;
+                    // Punish B
+                    agentB.reward = -0.1f;
+                }
+            }
+		} else if (collision.gameObject.tag == "AgentB")
+        {
+            if (collision.gameObject.GetComponent<Boxer>().actionState != (int)Boxer.ActionState.BLOCK)
+            {
+                // Intentional punch made contact with other boxer
+                if (this.gameObject.GetComponent<Boxer>().actionState == (int)Boxer.ActionState.BLOCK)
+                {
+                    // This punch has been blocked
+                    // Slightly punish Agent B
+                    agentB.reward = -0.05f;
+                    // Reward Agent A
+                    agentA.reward = 0.1f;
 
-			} else {
-
-			}
-		}
+                }
+                else
+                {
+                    Debug.Log(collision.gameObject.name + " landed a punch on " + this.gameObject.name);
+                    // Punch was not blocked
+                    // Reward B
+                    agentB.reward = 0.1f;
+                    // Punish A
+                    agentA.reward = -0.1f;
+                }
+            }
+        }
 	}
 }

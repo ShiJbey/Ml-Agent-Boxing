@@ -6,6 +6,7 @@ TagManager:
   tags:
   - AgentA
   - AgentB
+  - Agent
   layers:
   - Default
   - TransparentFX

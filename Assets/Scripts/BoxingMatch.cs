@@ -20,6 +20,10 @@ public class BoxingMatch : MonoBehaviour {
 	public void MatchReset() {
 		// Place agents back to their starting spots
 		AgentA.transform.position = new Vector3( 0f, 0.4f , -2f);
+        Boxer boxerA = AgentA.GetComponent<Boxer>();
+        boxerA.ResetLife();
 		AgentB.transform.position = new Vector3( 0f, 0.4f , 2f);
-	}
+        Boxer boxerB = AgentB.GetComponent<Boxer>();
+        boxerB.ResetLife();
+    }
 }
