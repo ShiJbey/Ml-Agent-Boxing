@@ -5,7 +5,7 @@ using UnityEngine;
 public class Boxer : MonoBehaviour
 {
 	// Enumeration of actions the boxer can take
-	enum ActionState
+	public enum ActionState
 	{
 		PUNCH_L = 0,
 		PUNCH_R,
@@ -13,36 +13,31 @@ public class Boxer : MonoBehaviour
 		PUNCH_HIGH_L,
 		BLOCK,
 		BLOCK_HIGH,
+		MOVING,
 		IDLE
-
 	};
 
 	// Total amount of damage that can be taken before knockout
-	public int life;
+	public float life = 10f;
 	// Damage that can be done to opponents
-	public int strength;
+	public float strength = 2f;
 	// Damage absorbed when blocking
-	public int defense;
-	// Time between consecutive punches
-	public float reactionTime;
+	public float defense = 0.5f;
 	// How fast boxer can turn towards opponent
-	public float turnSpeed;
+	public float turnSpeed = 10f;
 	// How fast can the boxer move forward, backwards, and laterally
 	public float moveSpeed;
+	// What action is the boxer currently performing
 	public int actionState;
 	// Reference to opponent
 	public Boxer opponent;
 
-	// Reference to Animator component
-	Animator anim;
-	int actionStateHash = Animator.StringToHash ("ActionState");
 	GameObject leftGlove;
 	GameObject rightGlove;
 
 	// Use this for initialization
 	void Start ()
 	{
-		anim = GetComponent<Animator> ();
 		leftGlove = this.gameObject.transform.GetChild (3).gameObject;
 		rightGlove = this.gameObject.transform.GetChild (2).gameObject;
 	}
