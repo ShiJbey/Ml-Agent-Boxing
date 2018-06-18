@@ -31,7 +31,7 @@ public class BoxingAgent : Agent
         state.Add(self.actionState);
         // Distance to opponent
         state.Add(Vector3.Distance(transform.position, opponent.gameObject.transform.position));
-        state.Add(self.currentLife);
+        state.Add(self.life);
         state.Add(self.strength);
         state.Add(self.defense);
         return state;
@@ -45,18 +45,32 @@ public class BoxingAgent : Agent
         float moveForward = 0.0f;
         float moveLeft = 0.0f;
         gameObject.GetComponent<Rigidbody>().velocity = Vector3.zero;
+        Vector3 vectToOpponent = opponent.transform.position - transform.position;
+        vectToOpponent.Normalize();
 
         // Moving forward and backward
         if (action == 0 || action == 1)
         {
             moveForward = (action == 0) ? 1f : -1f;
-            gameObject.GetComponent<Rigidbody>().velocity = transform.forward * moveForward * self.moveSpeed;
+            //transform.Translate(vectToOpponent * moveForward * Time.deltaTime * self.moveSpeed);
+            //gameObject.GetComponent<Rigidbody>().velocity = transform.forward * moveForward * self.moveSpeed;
+            gameObject.GetComponent<Rigidbody>().velocity = vectToOpponent * moveForward * self.moveSpeed;
+            if (action == 0)
+            {
+                self.actionState = (int)Boxer.ActionState.ADVANCING;
+            }
+            else
+            {
+                self.actionState = (int)Boxer.ActionState.RETREATING;
+            }
         }
         // Move left and right
         if (action == 2 || action == 3)
         {
             moveLeft = (action == 2) ? 1f : -1f;
-            gameObject.GetComponent<Rigidbody>().velocity = Quaternion.AngleAxis(-90, Vector3.up) * transform.forward * moveLeft * 2;
+            //gameObject.GetComponent<Rigidbody>().velocity = Quaternion.AngleAxis(-90, Vector3.up) * transform.forward * moveLeft * 2;
+            gameObject.GetComponent<Rigidbody>().velocity = Quaternion.AngleAxis(-90, Vector3.up) * vectToOpponent * moveLeft * 3;
+            self.actionState = (int)Boxer.ActionState.SIDESTEP;
         }
 
         // Punching and Blocking
@@ -79,6 +93,7 @@ public class BoxingAgent : Agent
                 self.GetComponent<Animator>().SetTrigger("RightPunch");
                 break;
             default:
+                self.actionState = (int)Boxer.ActionState.IDLE;
                 break;
         }
 
@@ -113,11 +128,11 @@ public class BoxingAgent : Agent
     {
         self = GetComponent<Boxer>();
         opponent = self.opponent;
+        self.Reset();
 
         invertMultX = (invertX) ? -1f : 1f;
         invertMultZ = (invertZ) ? -1f : 1f;
 
-        gameObject.transform.position = new Vector3(0, 0.4f, -(invertMultZ) * 2.0f) + transform.parent.transform.position;
         gameObject.GetComponent<Rigidbody>().velocity = new Vector3(0f, 0f, 0f);
     }
 
