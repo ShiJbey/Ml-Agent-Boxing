@@ -1,380 +1,560 @@
-﻿using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
-using Newtonsoft.Json;
 using System.Linq;
+using UnityEngine;
 
-
-/** The type of monitor the information must be displayed in.
- * <slider> corresponds to a slingle rectangle which width is given
- * by a float between -1 and 1. (green is positive, red is negative)
- * <hist> corresponds to n vertical sliders. 
- * <text> is a text field.
- * <bar> is a rectangle of fixed length to represent the proportions 
- * of a list of floats.
- */ 
-public enum MonitorType
+namespace MLAgents
 {
-    slider,
-    hist,
-    text,
-    bar
-}
-
-/** Monitor is used to display information. Use the log function to add
- * information to your monitor.
- */ 
-public class Monitor : MonoBehaviour
-{
-
-    static bool isInstanciated;
-    static GameObject canvas;
-
-    private struct DisplayValue
+    /// <summary>
+    /// Monitor is used to display information about the Agent within the Unity
+    /// scene. Use the log function to add information to your monitor.
+    /// </summary>
+    public class Monitor : MonoBehaviour
     {
-        public float time;
-        public object value;
-        public MonitorType monitorDisplayType;
-    }
-
-    static Dictionary<Transform, Dictionary<string,  DisplayValue>> displayTransformValues;
-    static private Color[] barColors;
-    [HideInInspector]
-    static public float verticalOffset = 3f;
-    /**< \brief This float represents how high above the target the monitors will be. */
-
-    static GUIStyle keyStyle;
-    static GUIStyle valueStyle;
-    static GUIStyle greenStyle;
-    static GUIStyle redStyle;
-    static GUIStyle[] colorStyle;
-    static bool initialized;
-
-
-    /** Use the Monitor.Log static function to attach information to a transform.
-     * If displayType is <text>, value can be any object. 
-     * If sidplayType is <slider>, value must be a float.
-     * If sidplayType is <hist>, value must be a List or Array of floats.
-     * If sidplayType is <bar>, value must be a list or Array of positive floats.
-     * Note that <slider> and <hist> caps values between -1 and 1.
-     * @param key The name of the information you wish to Log.
-     * @param value The value you want to display.
-     * @param displayType The type of display.
-     * @param target The transform you want to attach the information to.
-     */ 
-    public static void Log(
-        string key, 
-        object value, 
-        MonitorType displayType = MonitorType.text, 
-        Transform target = null)
-    {
-
-
-
-        if (!isInstanciated)
+        /// <summary>
+        /// The type of monitor the information must be displayed in.
+        /// <slider> corresponds to a single rectangle whose width is given
+        /// by a float between -1 and 1. (green is positive, red is negative)
+        /// </slider>
+        /// <hist> corresponds to n vertical sliders. </hist>
+        /// <text> is a text field. </text>
+        /// <bar> is a rectangle of fixed length to represent the proportions </bar>
+        /// of a list of floats.
+        /// </summary>
+        public enum DisplayType
         {
-            InstanciateCanvas();
-            isInstanciated = true;
-
+            Independent,
+            Proportion
         }
 
-        if (target == null)
-        {
-            target = canvas.transform;
-        }
+        /// <summary>
+        /// Represents how high above the target the monitors will be.
+        /// </summary>
+        public static float verticalOffset = 3f;
 
-        if (!displayTransformValues.Keys.Contains(target))
-        {
-            displayTransformValues[target] = new Dictionary<string, DisplayValue>();
-        }
+        static bool s_IsInstantiated;
+        static GameObject s_Canvas;
+        static Dictionary<Transform, Dictionary<string, DisplayValue>> s_DisplayTransformValues;
 
-        Dictionary<string, DisplayValue> displayValues = displayTransformValues[target];
+        /// <summary>
+        /// Camera used to calculate GUI screen position relative to the target
+        /// transform.
+        /// </summary>
+        static Dictionary<Transform, Camera> s_TransformCamera;
 
-        if (value == null)
+        static Color[] s_BarColors;
+
+        struct DisplayValue
         {
-            RemoveValue(target, key);
-            return;
-        }
-        if (!displayValues.ContainsKey(key))
-        {
-            DisplayValue dv = new DisplayValue();
-            dv.time = Time.timeSinceLevelLoad;
-            dv.value = value;
-            dv.monitorDisplayType = displayType;
-            displayValues[key] = dv;
-            while (displayValues.Count > 20)
+            public float time;
+            public string stringValue;
+            public float floatValue;
+            public float[] floatArrayValues;
+
+            public enum ValueType
             {
-                string max = displayValues.Aggregate((l, r) => l.Value.time < r.Value.time ? l : r).Key;
-                RemoveValue(target, max);
+                Float,
+                FloatarrayIndependent,
+                FloatarrayProportion,
+                String
             }
-        }
-        else
-        {
-            DisplayValue dv = displayValues[key];
-            dv.value = value;
-            displayValues[key] = dv;
-        }
-    }
 
-    /** Remove a value from a monitor
-     * @param target The transform to which the information is attached
-     * @param key The key of the information you want to remove
-     */ 
-    public static void RemoveValue(Transform target, string key)
-    {
-        if (target == null)
-        {
-            target = canvas.transform;
+            public ValueType valueType;
         }
-        if (displayTransformValues.Keys.Contains(target))
+
+        static GUIStyle s_KeyStyle;
+        static GUIStyle s_ValueStyle;
+        static GUIStyle s_GreenStyle;
+        static GUIStyle s_RedStyle;
+        static GUIStyle[] s_ColorStyle;
+        static bool s_Initialized;
+
+        /// <summary>
+        /// Use the Monitor.Log static function to attach information to a transform.
+        /// </summary>
+        /// <returns>The log.</returns>
+        /// <param name="key">The name of the information you wish to Log.</param>
+        /// <param name="value">The string value you want to display.</param>
+        /// <param name="target">The transform you want to attach the information to.
+        /// </param>
+        /// <param name="camera">Camera used to calculate GUI position relative to
+        /// the target. If null, `Camera.main` will be used.</param>
+        public static void Log(
+            string key,
+            string value,
+            Transform target = null,
+            Camera camera = null)
         {
-            if (displayTransformValues[target].ContainsKey(key))
+            if (!s_IsInstantiated)
             {
-                displayTransformValues[target].Remove(key);
-                if (displayTransformValues[target].Keys.Count == 0)
+                InstantiateCanvas();
+                s_IsInstantiated = true;
+            }
+
+            if (target == null)
+            {
+                target = s_Canvas.transform;
+            }
+
+            s_TransformCamera[target] = camera;
+
+            if (!s_DisplayTransformValues.Keys.Contains(target))
+            {
+                s_DisplayTransformValues[target] =
+                    new Dictionary<string, DisplayValue>();
+            }
+
+            var displayValues =
+                s_DisplayTransformValues[target];
+
+            if (value == null)
+            {
+                RemoveValue(target, key);
+                return;
+            }
+
+            if (!displayValues.ContainsKey(key))
+            {
+                var dv = new DisplayValue();
+                dv.time = Time.timeSinceLevelLoad;
+                dv.stringValue = value;
+                dv.valueType = DisplayValue.ValueType.String;
+                displayValues[key] = dv;
+                while (displayValues.Count > 20)
                 {
-                    displayTransformValues.Remove(target);
+                    var max = (
+                        displayValues
+                            .Aggregate((l, r) => l.Value.time < r.Value.time ? l : r)
+                            .Key
+                    );
+                    RemoveValue(target, max);
                 }
             }
+            else
+            {
+                var dv = displayValues[key];
+                dv.stringValue = value;
+                dv.valueType = DisplayValue.ValueType.String;
+                displayValues[key] = dv;
+            }
         }
 
-    }
-
-    /** Remove all information from a monitor
-     * @param target The transform to which the information is attached
-     */ 
-    public static void RemoveAllValues(Transform target)
-    {
-        if (target == null)
+        /// <summary>
+        /// Use the Monitor.Log static function to attach information to a transform.
+        /// </summary>
+        /// <returns>The log.</returns>
+        /// <param name="key">The name of the information you wish to Log.</param>
+        /// <param name="value">The float value you want to display.</param>
+        /// <param name="target">The transform you want to attach the information to.
+        /// </param>
+        /// <param name="camera">Camera used to calculate GUI position relative to
+        /// the target. If null, `Camera.main` will be used.</param>
+        public static void Log(
+            string key,
+            float value,
+            Transform target = null,
+            Camera camera = null)
         {
-            target = canvas.transform;
+            if (!s_IsInstantiated)
+            {
+                InstantiateCanvas();
+                s_IsInstantiated = true;
+            }
+
+            if (target == null)
+            {
+                target = s_Canvas.transform;
+            }
+
+            s_TransformCamera[target] = camera;
+
+            if (!s_DisplayTransformValues.Keys.Contains(target))
+            {
+                s_DisplayTransformValues[target] = new Dictionary<string, DisplayValue>();
+            }
+
+            var displayValues = s_DisplayTransformValues[target];
+
+            if (!displayValues.ContainsKey(key))
+            {
+                var dv = new DisplayValue();
+                dv.time = Time.timeSinceLevelLoad;
+                dv.floatValue = value;
+                dv.valueType = DisplayValue.ValueType.Float;
+                displayValues[key] = dv;
+                while (displayValues.Count > 20)
+                {
+                    var max = (
+                        displayValues.Aggregate((l, r) => l.Value.time < r.Value.time ? l : r).Key);
+                    RemoveValue(target, max);
+                }
+            }
+            else
+            {
+                var dv = displayValues[key];
+                dv.floatValue = value;
+                dv.valueType = DisplayValue.ValueType.Float;
+                displayValues[key] = dv;
+            }
         }
-        if (displayTransformValues.Keys.Contains(target))
+
+        /// <summary>
+        /// Use the Monitor.Log static function to attach information to a transform.
+        /// </summary>
+        /// <returns>The log.</returns>
+        /// <param name="key">The name of the information you wish to Log.</param>
+        /// <param name="value">The array of float you want to display.</param>
+        /// <param name="displayType">The type of display.</param>
+        /// <param name="target">The transform you want to attach the information to.
+        /// </param>
+        /// <param name="camera">Camera used to calculate GUI position relative to
+        /// the target. If null, `Camera.main` will be used.</param>
+        public static void Log(
+            string key,
+            float[] value,
+            Transform target = null,
+            DisplayType displayType = DisplayType.Independent,
+            Camera camera = null
+        )
         {
-            displayTransformValues.Remove(target);
-        }
-    
-    }
+            if (!s_IsInstantiated)
+            {
+                InstantiateCanvas();
+                s_IsInstantiated = true;
+            }
 
-    /** Use SetActive to enable or disable the Monitor via script
-     * @param active Set the Monitor's status to the value of active
-     */ 
-    public static void SetActive(bool active){
-        if (!isInstanciated)
-        {
-            InstanciateCanvas();
-            isInstanciated = true;
+            if (target == null)
+            {
+                target = s_Canvas.transform;
+            }
 
-        }
-        canvas.SetActive(active);
+            s_TransformCamera[target] = camera;
 
-    }
+            if (!s_DisplayTransformValues.Keys.Contains(target))
+            {
+                s_DisplayTransformValues[target] = new Dictionary<string, DisplayValue>();
+            }
 
-    private static void InstanciateCanvas()
-    {
-        canvas = GameObject.Find("AgentMonitorCanvas");
-        if (canvas == null)
-        {
-            canvas = new GameObject();
-            canvas.name = "AgentMonitorCanvas";
-            canvas.AddComponent<Monitor>();
-        }
-        displayTransformValues = new Dictionary<Transform, Dictionary< string , DisplayValue>>();
+            var displayValues = s_DisplayTransformValues[target];
 
-    }
+            if (!displayValues.ContainsKey(key))
+            {
+                var dv = new DisplayValue();
+                dv.time = Time.timeSinceLevelLoad;
+                dv.floatArrayValues = value;
+                if (displayType == DisplayType.Independent)
+                {
+                    dv.valueType = DisplayValue.ValueType.FloatarrayIndependent;
+                }
+                else
+                {
+                    dv.valueType = DisplayValue.ValueType.FloatarrayProportion;
+                }
 
-    private float[] ToFloatArray(object input)
-    {
-        try
-        {
-            return JsonConvert.DeserializeObject<float[]>(
-                JsonConvert.SerializeObject(input, Formatting.None));
-        }
-        catch
-        {
-        }
-        try
-        {
-            return new float[1]
-            {JsonConvert.DeserializeObject<float>(
-                    JsonConvert.SerializeObject(input, Formatting.None))
-            };
-        }
-        catch
-        {
-        }
+                displayValues[key] = dv;
+                while (displayValues.Count > 20)
+                {
+                    var max = (
+                        displayValues.Aggregate((l, r) => l.Value.time < r.Value.time ? l : r).Key);
+                    RemoveValue(target, max);
+                }
+            }
+            else
+            {
+                var dv = displayValues[key];
+                dv.floatArrayValues = value;
+                if (displayType == DisplayType.Independent)
+                {
+                    dv.valueType = DisplayValue.ValueType.FloatarrayIndependent;
+                }
+                else
+                {
+                    dv.valueType = DisplayValue.ValueType.FloatarrayProportion;
+                }
 
-        return new float[0];
-    }
-
-    void OnGUI()
-    {
-        if (!initialized)
-        {
-            Initialize();
-            initialized = true;
+                displayValues[key] = dv;
+            }
         }
 
-        var toIterate = displayTransformValues.Keys.ToList();
-        foreach (Transform target in toIterate)
+        /// <summary>
+        /// Remove a value from a monitor.
+        /// </summary>
+        /// <param name="target">
+        /// The transform to which the information is attached.
+        /// </param>
+        /// <param name="key">The key of the information you want to remove.</param>
+        public static void RemoveValue(Transform target, string key)
         {
             if (target == null)
             {
-                displayTransformValues.Remove(target);
-                continue;
+                target = s_Canvas.transform;
             }
- 
-            float widthScaler = (Screen.width / 1000f);
-            float keyPixelWidth = 100 * widthScaler;
-            float keyPixelHeight = 20 * widthScaler;
-            float paddingwidth = 10 * widthScaler;
 
-            float scale = 1f;
-            Vector2 origin = new Vector3(0, Screen.height);
-            if (!(target == canvas.transform))
+            if (s_DisplayTransformValues.Keys.Contains(target))
             {
-                Vector3 cam2obj = target.position - Camera.main.transform.position;
-                scale = Mathf.Min(1, 20f / (Vector3.Dot(cam2obj, Camera.main.transform.forward)));
-                Vector3 worldPosition = Camera.main.WorldToScreenPoint(target.position + new Vector3(0, verticalOffset, 0));
-                origin = new Vector3(worldPosition.x - keyPixelWidth * scale, Screen.height - worldPosition.y);
-            }
-            keyPixelWidth *= scale;
-            keyPixelHeight *= scale;
-            paddingwidth *= scale;
-            keyStyle.fontSize = (int)(keyPixelHeight * 0.8f);
-            if (keyStyle.fontSize < 2)
-            {
-                continue;
-            }
-                
-
-            Dictionary<string, DisplayValue> displayValues = displayTransformValues[target];
-
-            int index = 0;
-            foreach (string key in displayValues.Keys.OrderBy(x => -displayValues[x].time))
-            {
-                keyStyle.alignment = TextAnchor.MiddleRight;
-                GUI.Label(new Rect(origin.x, origin.y - (index + 1) * keyPixelHeight, keyPixelWidth, keyPixelHeight), key, keyStyle);
-                if (displayValues[key].monitorDisplayType == MonitorType.text)
+                if (s_DisplayTransformValues[target].ContainsKey(key))
                 {
-                    valueStyle.alignment = TextAnchor.MiddleLeft;
-                    GUI.Label(new Rect(
-                            origin.x + paddingwidth + keyPixelWidth,
-                            origin.y - (index + 1) * keyPixelHeight, 
-                            keyPixelWidth, keyPixelHeight), 
-                        JsonConvert.SerializeObject(displayValues[key].value, Formatting.None), valueStyle);
-
+                    s_DisplayTransformValues[target].Remove(key);
+                    if (s_DisplayTransformValues[target].Keys.Count == 0)
+                    {
+                        s_DisplayTransformValues.Remove(target);
+                    }
                 }
-                else if (displayValues[key].monitorDisplayType == MonitorType.slider)
-                {
-                    float sliderValue = 0f;
-                    if (displayValues[key].value.GetType() == typeof(float))
-                    {
-                        sliderValue = (float)displayValues[key].value;
-                    }
-                    else
-                    {
-                        Debug.LogError(string.Format("The value for {0} could not be displayed as " +
-                                "a slider because it is not a number.", key));
-                    }
-
-                    sliderValue = Mathf.Min(1f, sliderValue);
-                    GUIStyle s = greenStyle;
-                    if (sliderValue < 0)
-                    {
-                        sliderValue = Mathf.Min(1f, -sliderValue);
-                        s = redStyle;
-                    }
-                    GUI.Box(new Rect(
-                            origin.x + paddingwidth + keyPixelWidth,
-                            origin.y - (index + 0.9f) * keyPixelHeight, 
-                            keyPixelWidth * sliderValue, keyPixelHeight * 0.8f), 
-                        GUIContent.none, s);
-
-                }
-                else if (displayValues[key].monitorDisplayType == MonitorType.hist)
-                {
-                    float histWidth = 0.15f;
-                    float[] vals = ToFloatArray(displayValues[key].value);
-                    for (int i = 0; i < vals.Length; i++)
-                    {
-                        float value = Mathf.Min(vals[i], 1);
-                        GUIStyle s = greenStyle;
-                        if (value < 0)
-                        {
-                            value = Mathf.Min(1f, -value);
-                            s = redStyle;
-                        }
-                        GUI.Box(new Rect(
-                                origin.x + paddingwidth + keyPixelWidth + (keyPixelWidth * histWidth + paddingwidth / 2) * i,
-                                origin.y - (index + 0.1f) * keyPixelHeight, 
-                                keyPixelWidth * histWidth, -keyPixelHeight * value), 
-                            GUIContent.none, s);
-                    }
-
-
-                }
-                else if (displayValues[key].monitorDisplayType == MonitorType.bar)
-                {
-                    float[] vals = ToFloatArray(displayValues[key].value);
-                    float valsSum = 0f;
-                    float valsCum = 0f; 
-                    foreach (float f in vals)
-                    {
-                        valsSum += Mathf.Max(f, 0);
-                    }
-                    if (valsSum == 0)
-                    {
-                        Debug.LogError(string.Format("The Monitor value for key {0} must be "
-                                + "a list or array of positive values and cannot be empty.", key));
-                    }
-                    else
-                    {
-                        for (int i = 0; i < vals.Length; i++)
-                        {
-                            float value = Mathf.Max(vals[i], 0) / valsSum;
-                            GUI.Box(new Rect(
-                                    origin.x + paddingwidth + keyPixelWidth + keyPixelWidth * valsCum,
-                                    origin.y - (index + 0.9f) * keyPixelHeight, 
-                                    keyPixelWidth * value, keyPixelHeight * 0.8f), 
-                                GUIContent.none, colorStyle[i % colorStyle.Length]);
-                            valsCum += value;
-
-                        }
-
-                    }
-
-                }
-
-                index++;
             }
         }
-    }
 
-    private void Initialize()
-    {
-
-        keyStyle = GUI.skin.label;
-        valueStyle = GUI.skin.label;
-        valueStyle.clipping = TextClipping.Overflow;
-        valueStyle.wordWrap = false;
-
-
-
-        barColors = new Color[6]{ Color.magenta, Color.blue, Color.cyan, Color.green, Color.yellow, Color.red };
-        colorStyle = new GUIStyle[barColors.Length];
-        for (int i = 0; i < barColors.Length; i++)
+        /// <summary>
+        /// Remove all information from a monitor.
+        /// </summary>
+        /// <param name="target">
+        /// The transform to which the information is attached.
+        /// </param>
+        public static void RemoveAllValues(Transform target)
         {
-            Texture2D texture = new Texture2D(1, 1, TextureFormat.ARGB32, false);
-            texture.SetPixel(0, 0, barColors[i]);
-            texture.Apply();
-            GUIStyle staticRectStyle = new GUIStyle();
-            staticRectStyle.normal.background = texture;
-            colorStyle[i] = staticRectStyle;
-        }
-        greenStyle = colorStyle[3];
-        redStyle = colorStyle[5];
-    }
+            if (target == null)
+            {
+                target = s_Canvas.transform;
+            }
 
+            if (s_DisplayTransformValues.Keys.Contains(target))
+            {
+                s_DisplayTransformValues.Remove(target);
+            }
+        }
+
+        /// <summary>
+        /// Use SetActive to enable or disable the Monitor via script
+        /// </summary>
+        /// <param name="active">Value to set the Monitor's status to.</param>
+        public static void SetActive(bool active)
+        {
+            if (!s_IsInstantiated)
+            {
+                InstantiateCanvas();
+                s_IsInstantiated = true;
+            }
+
+            if (s_Canvas != null)
+            {
+                s_Canvas.SetActive(active);
+            }
+        }
+
+        /// Initializes the canvas.
+        static void InstantiateCanvas()
+        {
+            s_Canvas = GameObject.Find("AgentMonitorCanvas");
+            if (s_Canvas == null)
+            {
+                s_Canvas = new GameObject();
+                s_Canvas.name = "AgentMonitorCanvas";
+                s_Canvas.AddComponent<Monitor>();
+            }
+
+            s_DisplayTransformValues = new Dictionary<Transform,
+                                                      Dictionary<string, DisplayValue>>();
+
+            s_TransformCamera = new Dictionary<Transform, Camera>();
+        }
+
+        /// <inheritdoc/>
+        void OnGUI()
+        {
+            if (!s_Initialized)
+            {
+                Initialize();
+                s_Initialized = true;
+            }
+
+            var toIterate = s_DisplayTransformValues.Keys.ToList();
+            foreach (var target in toIterate)
+            {
+                if (target == null)
+                {
+                    s_DisplayTransformValues.Remove(target);
+                    continue;
+                }
+
+                // get camera
+                var cam = s_TransformCamera[target];
+                if (cam == null)
+                {
+                    cam = Camera.main;
+                }
+
+                var widthScaler = (Screen.width / 1000f);
+                var keyPixelWidth = 100 * widthScaler;
+                var keyPixelHeight = 20 * widthScaler;
+                var paddingWidth = 10 * widthScaler;
+
+                var scale = 1f;
+                var origin = new Vector3(
+                    Screen.width / 2.0f - keyPixelWidth, Screen.height);
+                if (!(target == s_Canvas.transform))
+                {
+                    var camTransform = cam.transform;
+                    var position = target.position;
+                    var cam2Obj = position - camTransform.position;
+                    scale = Mathf.Min(
+                        1,
+                        20f / (Vector3.Dot(cam2Obj, camTransform.forward)));
+                    var worldPosition = cam.WorldToScreenPoint(
+                        position + new Vector3(0, verticalOffset, 0));
+                    origin = new Vector3(
+                        worldPosition.x - keyPixelWidth * scale, Screen.height - worldPosition.y);
+                }
+
+                keyPixelWidth *= scale;
+                keyPixelHeight *= scale;
+                paddingWidth *= scale;
+                s_KeyStyle.fontSize = (int)(keyPixelHeight * 0.8f);
+                if (s_KeyStyle.fontSize < 2)
+                {
+                    continue;
+                }
+
+
+                var displayValues = s_DisplayTransformValues[target];
+
+                var index = 0;
+                var orderedKeys = displayValues.Keys.OrderBy(x => - displayValues[x].time);
+                foreach (var key in orderedKeys)
+                {
+                    s_KeyStyle.alignment = TextAnchor.MiddleRight;
+                    GUI.Label(
+                        new Rect(
+                            origin.x, origin.y - (index + 1) * keyPixelHeight,
+                            keyPixelWidth, keyPixelHeight),
+                        key,
+                        s_KeyStyle);
+                    float[] vals;
+                    GUIStyle s;
+                    switch (displayValues[key].valueType)
+                    {
+                        case DisplayValue.ValueType.String:
+                            s_ValueStyle.alignment = TextAnchor.MiddleLeft;
+                            GUI.Label(
+                                new Rect(
+                                    origin.x + paddingWidth + keyPixelWidth,
+                                    origin.y - (index + 1) * keyPixelHeight,
+                                    keyPixelWidth, keyPixelHeight),
+                                displayValues[key].stringValue,
+                                s_ValueStyle);
+                            break;
+                        case DisplayValue.ValueType.Float:
+                            var sliderValue = displayValues[key].floatValue;
+                            sliderValue = Mathf.Min(1f, sliderValue);
+                            s = s_GreenStyle;
+                            if (sliderValue < 0)
+                            {
+                                sliderValue = Mathf.Min(1f, -sliderValue);
+                                s = s_RedStyle;
+                            }
+
+                            GUI.Box(
+                                new Rect(
+                                    origin.x + paddingWidth + keyPixelWidth,
+                                    origin.y - (index + 0.9f) * keyPixelHeight,
+                                    keyPixelWidth * sliderValue, keyPixelHeight * 0.8f),
+                                GUIContent.none,
+                                s);
+                            break;
+
+                        case DisplayValue.ValueType.FloatarrayIndependent:
+                            const float histWidth = 0.15f;
+                            vals = displayValues[key].floatArrayValues;
+                            for (var i = 0; i < vals.Length; i++)
+                            {
+                                var value = Mathf.Min(vals[i], 1);
+                                s = s_GreenStyle;
+                                if (value < 0)
+                                {
+                                    value = Mathf.Min(1f, -value);
+                                    s = s_RedStyle;
+                                }
+
+                                GUI.Box(
+                                    new Rect(
+                                        origin.x + paddingWidth + keyPixelWidth +
+                                        (keyPixelWidth * histWidth + paddingWidth / 2) * i,
+                                        origin.y - (index + 0.1f) * keyPixelHeight,
+                                        keyPixelWidth * histWidth, -keyPixelHeight * value),
+                                    GUIContent.none,
+                                    s);
+                            }
+
+                            break;
+
+                        case DisplayValue.ValueType.FloatarrayProportion:
+                            var valsSum = 0f;
+                            var valsCum = 0f;
+                            vals = displayValues[key].floatArrayValues;
+                            foreach (var f in vals)
+                            {
+                                valsSum += Mathf.Max(f, 0);
+                            }
+
+                            if (valsSum < float.Epsilon)
+                            {
+                                Debug.LogError(
+                                    $"The Monitor value for key {key} " +
+                                    "must be a list or array of " +
+                                    "positive values and cannot " +
+                                    "be empty.");
+                            }
+                            else
+                            {
+                                for (var i = 0; i < vals.Length; i++)
+                                {
+                                    var value = Mathf.Max(vals[i], 0) / valsSum;
+                                    GUI.Box(
+                                        new Rect(
+                                            origin.x + paddingWidth +
+                                            keyPixelWidth + keyPixelWidth * valsCum,
+                                            origin.y - (index + 0.9f) * keyPixelHeight,
+                                            keyPixelWidth * value, keyPixelHeight * 0.8f),
+                                        GUIContent.none,
+                                        s_ColorStyle[i % s_ColorStyle.Length]);
+                                    valsCum += value;
+                                }
+                            }
+
+                            break;
+                    }
+
+                    index++;
+                }
+            }
+        }
+
+        /// Helper method used to initialize the GUI. Called once.
+        void Initialize()
+        {
+            s_KeyStyle = GUI.skin.label;
+            s_ValueStyle = GUI.skin.label;
+            s_ValueStyle.clipping = TextClipping.Overflow;
+            s_ValueStyle.wordWrap = false;
+            s_BarColors = new[]
+            {
+                Color.magenta,
+                Color.blue,
+                Color.cyan,
+                Color.green,
+                Color.yellow,
+                Color.red
+            };
+            s_ColorStyle = new GUIStyle[s_BarColors.Length];
+            for (var i = 0; i < s_BarColors.Length; i++)
+            {
+                var texture = new Texture2D(1, 1, TextureFormat.ARGB32, false);
+                texture.SetPixel(0, 0, s_BarColors[i]);
+                texture.Apply();
+                var staticRectStyle = new GUIStyle();
+                staticRectStyle.normal.background = texture;
+                s_ColorStyle[i] = staticRectStyle;
+            }
+
+            s_GreenStyle = s_ColorStyle[3];
+            s_RedStyle = s_ColorStyle[5];
+        }
+    }
 }

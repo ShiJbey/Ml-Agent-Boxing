@@ -2,18 +2,25 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class RevolveCamera : MonoBehaviour {
+namespace MLBoxing
+{
+	public class RevolveCamera : MonoBehaviour
+	{
 
-    public Transform target;
+		public Transform target;
 
-	// Use this for initialization
-	void Start () {
-		
+		// Use this for initialization
+		void Start()
+		{
+
+		}
+
+		// Update is called once per frame
+		void Update()
+		{
+			transform.LookAt(target);
+			transform.Translate(Vector3.right * Time.deltaTime * 2f);
+		}
 	}
-	
-	// Update is called once per frame
-	void Update () {
-        transform.LookAt(target);
-        transform.Translate(Vector3.right * Time.deltaTime * 2f);
-    }
 }
+

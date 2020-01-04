@@ -8,6 +8,8 @@ TagManager:
   - AgentB
   - Agent
   - MenuCamera
+  - Hand
+  - Head
   layers:
   - Default
   - TransparentFX
@@ -17,8 +19,8 @@ TagManager:
   - UI
   - 
   - 
-  - AgentA
-  - AgentB
+  - Red
+  - Blue
   - 
   - 
   - 

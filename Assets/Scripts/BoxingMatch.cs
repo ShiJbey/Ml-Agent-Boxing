@@ -2,146 +2,193 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class BoxingMatch : MonoBehaviour {
+namespace MLBoxing
+{
+    /// <summary>
+    /// Manages a match between two Boxer agents. This class
+    /// specifically manages the state of the round and 
+    /// reseting agents at the end of the round.
+    /// </summary>
+    public class BoxingMatch : TrainingMatch
+    {
+        // Settings for the rounds
+        public int m_TotalRounds = 3;
+        public int m_CurrentRound = 0;
+        public float m_RoundDuration = 30f;
+        private float m_TimeLeftInRound;
+        private bool m_RoundInProgress = false;
 
-    // References to the two boxers
-	public GameObject AgentA;
-	public GameObject AgentB;
+        // References to UI objects
+        public RoundStats m_RoundStatsUI;
+        public FightCountdown m_FightCountdownUI;
+        public EndMenu m_EndMenu;
 
-    // Settings for the rounds
-    public int totalRounds = 3;
-    public int currentRound = 0;
-    public int roundDuration = 30;
-    public float timeLeftInRound;
-    public bool roundInProgress;
 
-    // References to UI objects
-    public RoundStats roundStats;
-    public FightCountdown fightCountdown;
-    public EndMenu endMenu;
-
-    // Use this for initialization
-    void Start () {
-        timeLeftInRound = roundDuration;
-        roundInProgress = false;
-        ResetRoundTime();
-        ResetRoundNumber();
-	}
-	
-	// Update is called once per frame
-	void Update () {
-		if (roundInProgress)
+        // Use this for initialization
+        void Start()
         {
-            // Update the time left
-            timeLeftInRound -= Time.deltaTime;
-            // Update the time counter in the UI
-            roundStats.SetRoundTime((int)timeLeftInRound);
-            float boxerALife = AgentA.GetComponent<Boxer>().life;
-            float boxerBLife = AgentB.GetComponent<Boxer>().life;
-            if (boxerALife <= 0 || boxerBLife <= 0)
-            {
-                Debug.Log("Game should be over");
-                // Declare a winner and show the end menu
+            m_BoxerA.AgentReset();
+            m_BoxerB.AgentReset();
+            ResetRoundTime();
+            ResetRoundNumber();
+        }
 
-                if (boxerALife > boxerBLife)
-                {
-                    endMenu.SetWinnerText("Red Wins!");
-                }
-                else if (boxerALife < boxerBLife)
-                {
-                    endMenu.SetWinnerText("Blue Wins!");
-                }
-                else
-                {
-                    endMenu.SetWinnerText("Its a tie!");
-                }
-                endMenu.gameObject.SetActive(true);
-                roundStats.gameObject.SetActive(false);
-                roundInProgress = false;
-            }
-
-            if (timeLeftInRound <= 0)
+        // Update is called once per frame
+        void Update()
+        {
+            if (m_RoundInProgress)
             {
-                roundInProgress = false;
-                // End the round
-                RoundEnd();
-                fightCountdown.Reset();
-                
-                if (currentRound >= totalRounds)
+                // Update the time left
+                m_TimeLeftInRound -= Time.deltaTime;
+
+                // Update the time counter in the UI
+                if (m_RoundStatsUI != null)
+                    m_RoundStatsUI.SetRoundTime((int)m_TimeLeftInRound);
+
+                // Check for knock out
+                if (m_BoxerA.IsKnockedOut() && m_BoxerB.IsKnockedOut())
                 {
-                    Debug.Log("Game should be over");
-                    // Declare a winner and show the end menu
-                    
-                    if (boxerALife > boxerBLife)
+                    // Tie
+                    Debug.Log("Game over. Tie by double knockout.");
+                    if (m_EndMenu != null)
                     {
-                        endMenu.SetWinnerText("Red Wins!");
+                        m_EndMenu.SetWinnerText("Tie! Double Knockout.");
+                        m_EndMenu.gameObject.SetActive(true);
                     }
-                    else if (boxerALife < boxerBLife)
+                    if (m_RoundStatsUI !=  null)
                     {
-                        endMenu.SetWinnerText("Blue Wins!");
+                        m_RoundStatsUI.gameObject.SetActive(false);
+                    }
+                    
+               
+                    m_RoundInProgress = false;
+                }
+                else if (!m_BoxerA.IsKnockedOut() && m_BoxerB.IsKnockedOut())
+                {
+                    // Boxer A Win
+                    Debug.Log("Game over. Red wins by knockout.");
+                    if (m_EndMenu != null)
+                    {
+                        m_EndMenu.SetWinnerText("Knockout! Red wins!");
+                        m_EndMenu.gameObject.SetActive(true);
+                    }
+                    if (m_RoundStatsUI != null)
+                    {
+                        m_RoundStatsUI.gameObject.SetActive(false);
+                    }
+                    m_RoundInProgress = false;
+                }
+                else if (m_BoxerA.IsKnockedOut() && !m_BoxerB.IsKnockedOut())
+                {
+                    // Boxer B Win
+                    Debug.Log("Game over. Blue wins by knockout.");
+                    if (m_EndMenu != null)
+                    {
+                        m_EndMenu.SetWinnerText("Knockout! Blue Wins!");
+                        m_EndMenu.gameObject.SetActive(true);
+                    }
+                    if (m_RoundStatsUI != null)
+                    {
+                        m_RoundStatsUI.gameObject.SetActive(false);
+                    }
+                    m_RoundInProgress = false;
+                }
+
+                 // Check if the round is over
+                if (m_TimeLeftInRound <= 0)
+                {
+                    m_RoundInProgress = false;
+                    // End the round
+                    RoundEnd();
+                    if (m_RoundStatsUI != null)
+                    {
+                        m_FightCountdownUI.Reset();
+                    }
+
+                    if (m_CurrentRound >= m_TotalRounds)
+                    {
+                        if (m_BoxerA.m_Life > m_BoxerB.m_Life)
+                        {
+                            Debug.Log("Game over. Red wins by points.");
+                            if (m_EndMenu != null)
+                                m_EndMenu.SetWinnerText("Match Over. Red Wins!");
+                        }
+                        else if (m_BoxerA.m_Life < m_BoxerB.m_Life)
+                        {
+                            Debug.Log("Game over. Blue wins by points.");
+                            if (m_EndMenu != null)
+                                m_EndMenu.SetWinnerText("Match Over. Blue Wins!");
+                        }
+                        else
+                        {
+                            Debug.Log("Game over. Tie by points.");
+                            if (m_EndMenu != null)
+                                m_EndMenu.SetWinnerText("Match Over. Tie!");
+                        }
+                        if (m_EndMenu != null)
+                            m_EndMenu.gameObject.SetActive(true);
+                        if (m_RoundStatsUI != null)
+                            m_RoundStatsUI.gameObject.SetActive(false);
                     }
                     else
                     {
-                        endMenu.SetWinnerText("Its a tie!");
+                        if (m_RoundStatsUI != null)
+                            m_RoundStatsUI.gameObject.SetActive(false);
+                        if (m_FightCountdownUI != null)
+                        {
+                            m_FightCountdownUI.SayRoundOver();
+                            m_FightCountdownUI.gameObject.SetActive(true);
+                        }
                     }
-                    endMenu.gameObject.SetActive(true);
-                    roundStats.gameObject.SetActive(false);
-                }
-                else
-                {
-                    roundStats.gameObject.SetActive(false);
-                    fightCountdown.SayRoundOver();
-                    fightCountdown.gameObject.SetActive(true);
                 }
             }
         }
-	}
 
-    // Set the match to begin
-    public void RoundStart()
-    {
-        // Set the time back for full round
-        ResetRoundTime();
-        // Set the counter for a new round
-        currentRound++;
-        roundStats.SetRoundNumber(currentRound);
-        // Enable the boxers to move, block, and attack
-        AgentA.GetComponent<BoxingAgent>().enabled = true;
-        AgentB.GetComponent<BoxingAgent>().enabled = true;
+        // Set the match to begin
+        public void RoundStart()
+        {
+            // Set the time back for full round
+            ResetRoundTime();
+            // Set the counter for a new round
+            m_CurrentRound++;
+            if (m_RoundStatsUI)
+                m_RoundStatsUI.SetRoundNumber(m_CurrentRound);
+            // Enable the boxers to move, block, and attack
+            m_BoxerA.enabled = true;
+            m_BoxerB.enabled = true;
 
-        roundInProgress = true;
-    }
+            m_RoundInProgress = true;
+        }
 
-    public void ResetRoundTime()
-    {
-        timeLeftInRound = roundDuration;
-    }
+        public void ResetRoundTime()
+        {
+            m_TimeLeftInRound = m_RoundDuration;
+        }
 
-    public void ResetRoundNumber()
-    {
-        currentRound = 0;
-    }
+        public void ResetRoundNumber()
+        {
+            m_CurrentRound = 0;
+        }
 
-    public void RoundEnd()
-    {
-        // Enable the boxers to move, block, and attack
-        AgentA.GetComponent<BoxingAgent>().enabled = false;
-        AgentB.GetComponent<BoxingAgent>().enabled = false;
-        // Reset Boxer positions, but not stats
-        AgentA.GetComponent<Boxer>().ResetPositioning();
-        AgentB.GetComponent<Boxer>().ResetPositioning();
-        // Stops all timers
-        roundInProgress = false;
-    }
+        public void RoundEnd()
+        {
+            // Enable the boxers to move, block, and attack
+            m_BoxerA.enabled = true;
+            m_BoxerB.enabled = true;
+            // Reset Boxer positions, but not stats
+            m_BoxerA.ReturnToCorner();
+            m_BoxerB.ReturnToCorner();
+            // Stops all timers
+            m_RoundInProgress = false;
+        }
 
-    public void MatchReset()
-    {
-        // Place agents back to their starting spots
-        Boxer boxerA = AgentA.GetComponent<Boxer>();
-        boxerA.Reset();
-        Boxer boxerB = AgentB.GetComponent<Boxer>();
-        boxerB.Reset();
-        ResetRoundTime();
-        ResetRoundNumber();
+        public override void MatchReset()
+        {
+            // Place agents back to their starting spots
+            m_BoxerA.AgentReset();
+            m_BoxerB.AgentReset();
+            ResetRoundTime();
+            ResetRoundNumber();
+        }
     }
 }
